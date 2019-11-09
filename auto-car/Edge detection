@@ -1,0 +1,132 @@
+#include "main.h"
+#include "adc.h"
+#include "dma.h"
+#include "i2c.h"
+#include "spi.h"
+#include "tim.h"
+#include "usart.h"
+#include "gpio.h"
+#include "lcd.h"
+#include "camera.h"
+
+void SystemClock_Config(void);
+
+
+int main(void) {
+	HAL_Init();
+	SystemClock_Config();
+	MX_GPIO_Init();
+	MX_DMA_Init();
+	CAM_Init();
+	tft_init(PIN_ON_TOP, BLACK, WHITE, YELLOW, RED);
+	CAM_SetColorMode(CAM_GRAYSCALE);
+	CAM_SetFrameRate(CAM_150FPS);
+	uint8_t grey_op[CAM_FrameHeight()][CAM_FrameWidth()];
+	uint8_t result_op[CAM_FrameHeight() - 2][CAM_FrameWidth() - 2];
+	uint16_t rgb_op[CAM_FrameHeight() - 2][CAM_FrameWidth() - 2];
+	int result1;
+	int result2;
+	int result3;
+	int midpoint= 30;
+	int t_point1=0;
+	int t_point2=0;
+	int t_mid = 0;
+	int distance;
+	while (1) {
+		if (CAM_FrameReady()) {
+			CAM_GetGrayscale(grey_op);
+			CAM_AutoDenoise(rgb_op);
+			//edge detection
+			for (int i = 1; i < 59; i++) {
+				for (int j = 1; j < 79; j++) {
+					result1 = grey_op[i + 1][j + 1] + grey_op[i][j + 1] * 2 + grey_op[i - 1][j + 1]
+							- (grey_op[i - 1][j - 1] + grey_op[i][j - 1] * 2 + grey_op[i + 1][j + 1]);
+					result2 = grey_op[i - 1][j - 1] + grey_op[i - 1][j] * 2 + grey_op[i - 1][j + 1]
+							- (grey_op[i + 1][j - 1] + grey_op[i + 1][j] * 2 + grey_op[i + 1][j + 1]);
+					result3 = result1 * result1 + result2 * result2;
+					if (result3 > 15000) {
+						result_op[i][j] = 255;
+					} else {
+						result_op[i][j] = 0;
+					}
+
+				}
+
+			}
+			//midpoint comparison
+			for(int m=1;m<59;m++){
+				if(m<=30){
+					if(result_op[40][m] == 255){
+						t_point1 = m;
+					}
+				}
+				if(m>30){
+					if(result_op[40][m] == 255){
+						t_point2 = m;
+					}
+				}
+				distance = t_point2 - t_point1;
+				t_mid = (t_point2+t_point1)/2;
+
+			}
+			
+			CAM_GreyToRGB565(result_op, rgb_op);
+			for(int b = 0; b<59;b++){
+				rgb_op[40][b]=
+			}
+			tft_print_image(rgb_op, 0, 60, 78, 58);
+			tft_printi(0, 0,distance);
+			tft_printi(0, 80,t_mid);
+			tft_update(0);
+		}
+
+	}
+
+}
+
+/**
+ * @brief System Clock Configuration
+ * @retval None
+ */
+void SystemClock_Config(void) {
+	RCC_OscInitTypeDef RCC_OscInitStruct = { 0 };
+	RCC_ClkInitTypeDef RCC_ClkInitStruct = { 0 };
+	RCC_PeriphCLKInitTypeDef PeriphClkInit = { 0 };
+
+	/** Initializes the CPU, AHB and APB busses clocks
+	 */
+	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+	RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+	RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
+	RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+	RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
+	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+		Error_Handler();
+	}
+	/** Initializes the CPU, AHB and APB busses clocks
+	 */
+	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
+		Error_Handler();
+	}
+	PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+	PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV8;
+	if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK) {
+		Error_Handler();
+	}
+}
+
+/**
+ * @brief  This function is executed in case of error occurrence.
+ * @retval None
+ */
+void Error_Handler(void) {
+}
+
