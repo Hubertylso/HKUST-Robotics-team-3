@@ -24,6 +24,7 @@ bool diff_checked = false;
 bool button_pressed = false;
 bool button_trigger = false;
 
+//tuning time and flux difference to confirm turning
 uint16_t tune_m_diff_m = 0;
 uint16_t tune_t_diff_m = 0;
 
@@ -52,16 +53,13 @@ void setup_mode(){
   //front middle sensor = channel 0
   //front left sensor = channel 1
   //front right sensor = channel 2
-  //back middle sensor = channel 4
+  //back middle sensor = channel 3
   max_f_m_ms = ADC_Values[0][0];
   max_f_l_ms = ADC_Values[0][1];
   max_f_r_ms = ADC_Values[0][2];
   max_b_ms = ADC_Values[0][3];
 
   uint32_t int_fin = HAL_GetTick();
-
-  //tuning time and flux difference to confirm turning
-
 
   bool finish_setup = false;
   bool first_fin = true;
@@ -71,6 +69,7 @@ void setup_mode(){
     read_1();
     if(button_trigger == true){
       do{
+	//moving till the maximum value is acquired
         bool f_max_done = false;
         bool b_max_done = false;
         uint16_t now_f_m_ms = ADC_Values[0][0];
@@ -87,6 +86,7 @@ void setup_mode(){
           f_max_done = true;
         }
         if(now_b_ms > max_b_ms && now_b_ms == now_f_m_ms){
+		//when the maximum value is acquired, LED 1 will be turned on
           HAL_GPIO_WritePin(LED1_GPIO_Port,LED1_Pin,GPIO_PIN_RESET);
           max_b_ms = now_b_ms;
         }
@@ -102,7 +102,9 @@ void setup_mode(){
             first_fin = true;
           }
           else if(HAL_GetTick() - int_fin >= 10000){
+		  //when the the reading of magnatic flux value is the maximum value for 10 seconds, LED2 will light up
             HAL_GPIO_WritePin(LED2_GPIO_Port,LED2_Pin,GPIO_PIN_SET);
+		  //setup mode will be finished
             finish_setup = true;
           }
         }
@@ -134,11 +136,17 @@ int main(){
     uint16_t now_b_ms = ADC_Values[0][3];
     uint16_t now_f_l_ms = ADC_Values[0][1];
     uint16_t now_f_r_ms = ADC_Values[0][2];
-    if(now_b_ms == max_b_ms && now_f_m_ms == max_f_m_ms)
+	  //compare the value now to the value of the middle magnatic sensor
+    if(now_b_ms == max_b_ms && now_f_m_ms == max_f_m_ms){
+	  // if it is the same, just go forward
       front();
+    }
     else{
+	  //if it is different check whether to turn left or turn right
       uint32_t m_diff_int = HAL_GetTick();
       if(diff_checked == false){
+	      //for tuning how long the change in magnatic flux is detected will turning take place in case of not uniform magnatic field
+	      // a tolerance in chang3e in magnatic flux is also added in case the magnatic field is not uniform
         m_diff_done = HAL_GetTick();
         diff_checked = true;
       }
