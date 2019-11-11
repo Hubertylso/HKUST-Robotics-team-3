@@ -18,6 +18,9 @@ uint16_t max_f_l_ms;
 uint16_t max_f_r_ms;
 uint16_t max_b_ms;
 
+uint32_t m_diff_done;
+bool diff_checked = false;
+
 bool button_pressed = false;
 bool button_trigger = false;
 
@@ -98,7 +101,7 @@ void setup_mode(){
             int_fin = HAL_GetTick();
             first_fin = true;
           }
-          else if(HAL_GetTick() - int_fin >= 1000){
+          else if(HAL_GetTick() - int_fin >= 10000){
             HAL_GPIO_WritePin(LED2_GPIO_Port,LED2_Pin,GPIO_PIN_SET);
             finish_setup = true;
           }
@@ -112,7 +115,43 @@ void setup_mode(){
   }
 }
 
+int front(){
+	return 0;
+}
+
+int turn_right(){
+	return 0;
+}
+
+int turn_left(){
+	return 0;
+}
+
 int main(){
+  setup_mode();
+  while(1){
+    uint16_t now_f_m_ms = ADC_Values[0][0];
+    uint16_t now_b_ms = ADC_Values[0][3];
+    uint16_t now_f_l_ms = ADC_Values[0][1];
+    uint16_t now_f_r_ms = ADC_Values[0][2];
+    if(now_b_ms == max_b_ms && now_f_m_ms == max_f_m_ms)
+      front();
+    else{
+      uint32_t m_diff_int = HAL_GetTick();
+      if(diff_checked == false){
+        m_diff_done = HAL_GetTick();
+        diff_checked = true;
+      }
+      if((max_f_r_ms - now_f_r_ms < tune_m_diff_m) && (m_diff_done - m_diff_int > tune_t_diff_m)){
+        turn_right();
+        diff_checked = false;
+      }
+      else if((max_f_l_ms - now_f_l_ms < tune_m_diff_m) && (m_diff_done - m_diff_int > tune_t_diff_m)){
+        turn_left();
+        diff_checked = false;
+      }
+    }
+  }
   return 0;
 }
 
