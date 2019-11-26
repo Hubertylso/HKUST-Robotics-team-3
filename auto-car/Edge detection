@@ -21,6 +21,7 @@ int main(void) {
 
 	CAM_SetColorMode(CAM_GRAYSCALE);
 	CAM_SetFrameRate(CAM_150FPS);
+	CAM_SetFrameSize(QQVGA_160x120);
 
 	uint8_t grey_op[CAM_FrameHeight()][CAM_FrameWidth()];
 	uint8_t result_op[CAM_FrameHeight() - 2][CAM_FrameWidth() - 2];
@@ -29,31 +30,41 @@ int main(void) {
 	int result1;
 	int result2;
 	int result3;
-	int midpoint = 40;
+	int midpoint = 80;
 	int t_point1 = 0;
 	int t_point2 = 0;
 	int t_mid = 0;
 	int distance;
 	int check = 40;
 	int error;
+	int last_error;
+	int derivative;
+	int integral;
+	int kp;
+	int ki;
+	int kd;
+
 
 	//PWM
 	TIM1_PWM_Init();
 	TIM5_PWM_Init();
-	HAL_TIM_ConfigTimer(MOTOR_TIM, 23, 599);
+	HAL_TIM_ConfigTimer(MOTOR_TIM, 23, 59999);
+		//2400 = left
+		//6000 = right
+		//4200 = middle
+		//distance = 1800
 	HAL_TIM_PWM_Start(MOTOR_TIM, TIM_CHANNEL_1);
 	HAL_GPIO_InitPin(M1_DIR_GPIO_Port, M1_DIR_Pin, GPIO_MODE_OUTPUT_PP,
 	GPIO_PULLUP);
 
 	while (1) {
 		static uint32_t this_ticks = 0;
-//		if (HAL_GetTick() - this_ticks >= 100) {
 		if (CAM_FrameReady()) {
 			CAM_GetGrayscale(grey_op);
 			CAM_AutoDenoise(rgb_op);
 			//edge detection
-			for (int i = 1; i < 59; i++) {
-				for (int j = 1; j < 79; j++) {
+			for (int i = 1; i < CAM_FrameHeight()-1; i++) {
+				for (int j = 1; j < CAM_FrameWidth()-1; j++) {
 					//y axis detection
 					result1 = grey_op[i + 1][j + 1] + grey_op[i][j + 1] * 2 + grey_op[i - 1][j + 1]
 							- (grey_op[i - 1][j - 1] + grey_op[i][j - 1] * 2 + grey_op[i + 1][j + 1]);
@@ -74,7 +85,7 @@ int main(void) {
 			}
 			//midpoint comparison
 			//examining the left side of the image
-			for (int m = 0; m < 39; m++) {
+			for (int m = 0; m < (CAM_FrameWidth()/2)-1; m++) {
 				//determining the inner edge
 				if (result_op[check][m] == 255) {
 					t_point1 = m;
@@ -82,7 +93,7 @@ int main(void) {
 
 			}
 			//examining the right side of the image
-			for (int m = 78; m > 40; m--) {
+			for (int m = CAM_FrameWidth()-2; m > (CAM_FrameWidth()/2); m--) {
 				//determining the inner edge
 				if (result_op[check][m] == 255) {
 					t_point2 = m;
@@ -95,35 +106,46 @@ int main(void) {
 			t_mid = (t_point2 + t_point1) / 2;
 			//making the red middle line
 			CAM_GreyToRGB565(result_op, rgb_op);
-			for (int i = 0; i < 59; i++) {
+			for (int i = 0; i < CAM_FrameHeight()-1; i++) {
 				rgb_op[i][39] = RED;
 				rgb_op[i][40] = RED;
 			}
-			for (int i = 0; i < 79; i++) {
+			for (int i = 0; i < CAM_FrameWidth()-1; i++) {
 				rgb_op[check][i] = BLUE;
 			}
-			for (int i = 0; i < 59; i++) {
+			for (int i = 0; i < CAM_FrameHeight()-1; i++) {
 				rgb_op[i][t_point1] = GREEN;
 				rgb_op[i][t_point2] = GREEN;
 			}
 
 			error = midpoint - t_mid;
-			tft_print_image(rgb_op, 0, 60, 78, 58);
+			tft_print_image(rgb_op, 0, 60, CAM_FrameWidth()-2, CAM_FrameHeight()-2);
 			tft_printi(0, 1, error);
 			//if error >0 = go to the left
 			//if error <0 = fo to the right
 			tft_update(0);
 
 		}
-		//pwm
+//		pwm
 
-//		HAL_GPIO_WritePin(M1_DIR_GPIO_Port, M1_DIR_Pin, direction1);
-//
-//		HAL_TIM_PWM_SetCompare(MOTOR_TIM, TIM_CHANNEL_1, value);
+		if (HAL_GetTick() - this_ticks >= 100) {
+		HAL_TIM_PWM_SetCompare(MOTOR_TIM, TIM_CHANNEL_1, value);
 
-//
-//		this_ticks = HAL_GetTick();
-//		}
+		//if error > 0 = go to the left
+		//if error < 0 = go to the right
+		if(error != 0){
+			last_error = error;
+			derivative = error - last_error;
+			integral = integral + error;
+
+			value = (error * kp) + (derivative * kd) + (integral * ki) + 4200;
+		}else{
+			integral = 0;
+			derivative = 0;
+		}
+
+		this_ticks = HAL_GetTick();
+		}
 
 	}
 
